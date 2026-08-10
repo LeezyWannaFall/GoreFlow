@@ -1,6 +1,7 @@
 package job
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -20,22 +21,26 @@ const (
 type Job struct {
 	ID          uuid.UUID
 	Type        string
-	Payload     []byte
+	Payload     json.RawMessage
 	Status      Status
 	Attempt     int
 	MaxAttempts int
 	RunAfter    time.Time
 	LockedBy    string
 	LeaseUntil  time.Time
-	Result      []byte
+	Result      json.RawMessage
 	Error       string
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
 
-func NewJob(jobType string, payload []byte) (*Job, error) {
+func NewJob(jobType string, payload json.RawMessage) (*Job, error) {
 	if strings.TrimSpace(jobType) == "" {
 		return nil, errors.New("job type must not be empty")
+	}
+
+	if !json.Valid(payload) {
+		return nil, errors.New("invalid json format")
 	}
 
 	now := time.Now().UTC()
@@ -87,7 +92,7 @@ func (j *Job) Start(workerID string, now time.Time, leaseDuration time.Duration)
 }
 
 // running -> succeeded
-func (j *Job) Complete(result []byte, endTime time.Time) error {
+func (j *Job) Complete(result json.RawMessage, endTime time.Time) error {
 	if j.Status != StatusRunning {
 		return errors.New("job is not running now")
 	}
@@ -120,14 +125,14 @@ func (j *Job) Fail(errorText string, endTime time.Time) error {
 		return errors.New("end time can't be earlier than job update")
 	}
 
-    if errorText == "" {
+    if strings.TrimSpace(errorText) == ""  {
         return errors.New("error doesnt have text")
     }
 
 	j.Status = StatusFailed
 	j.LeaseUntil = time.Time{}
 	j.LockedBy = ""
-    j.Result = []byte{}
+    j.Result = nil
 	j.Error = errorText
 	j.UpdatedAt = endTime
 
