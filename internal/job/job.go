@@ -125,14 +125,14 @@ func (j *Job) Fail(errorText string, endTime time.Time) error {
 		return errors.New("end time can't be earlier than job update")
 	}
 
-    if strings.TrimSpace(errorText) == ""  {
-        return errors.New("error doesnt have text")
-    }
+	if strings.TrimSpace(errorText) == "" {
+		return errors.New("error doesnt have text")
+	}
 
 	j.Status = StatusFailed
 	j.LeaseUntil = time.Time{}
 	j.LockedBy = ""
-    j.Result = nil
+	j.Result = nil
 	j.Error = errorText
 	j.UpdatedAt = endTime
 
