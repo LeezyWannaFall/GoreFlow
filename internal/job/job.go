@@ -53,6 +53,7 @@ func NewJob(jobType string, payload []byte) (*Job, error) {
 	}, nil
 }
 
+// queued -> running
 func (j *Job) Start(workerID string, now time.Time, leaseDuration time.Duration) error {
 	if j.Status != StatusQueued {
 		return errors.New("only queued job can be started")
@@ -85,8 +86,8 @@ func (j *Job) Start(workerID string, now time.Time, leaseDuration time.Duration)
 	return nil
 }
 
+// running -> succeeded
 func (j *Job) Complete(result []byte, endTime time.Time) error {
-	// running → succeeded
 	if j.Status != StatusRunning {
 		return errors.New("job is not running now")
 	}
@@ -107,8 +108,8 @@ func (j *Job) Complete(result []byte, endTime time.Time) error {
 	return nil
 }
 
+// running -> failed
 func (j *Job) Fail(errorText string, endTime time.Time) error {
-	// running → failed
 	if j.Status != StatusRunning {
 		return errors.New("job is not running now")
 	}
