@@ -20,5 +20,6 @@ func main() {
 	}
 
 	log.Println("Successfully connected to the database.")
-	// Your application logic here
+	
+	// application logic
 }
