@@ -66,7 +66,10 @@ flowchart LR
     API --> Application[Application layer]
     Worker --> Application
     Worker --> Executor
-    Application --> PostgreSQL[(PostgreSQL)]
+    Application --> Domain[Job domain]
+    Application --> Port[JobRepository port]
+    PostgreSQLAdapter[PostgreSQL adapter] -->|implements| Port
+    PostgreSQLAdapter --> PostgreSQL[(PostgreSQL)]
 ```
 
 Ответственность слоёв:
@@ -102,6 +105,17 @@ tests/
 На текущем этапе используется единая временная точка входа `cmd/app`. Она только открывает соединение с PostgreSQL, проверяет его через `Ping` и завершает работу. Разделение на отдельные процессы API и worker произойдёт при реализации соответствующих вертикальных сценариев.
 
 Отдельный пакет конфигурации пока не используется. Инфраструктурные настройки передаются приложению через переменные окружения.
+
+Текущий application-слой реализует два пользовательских сценария:
+
+- `CreateJob` создаёт доменную сущность через `job.NewJob`, сохраняет её и возвращает созданную задачу;
+- `GetJobByID` проверяет идентификатор и получает задачу из repository.
+
+Application владеет узким портом `JobRepository`, в который сейчас входят только необходимые этим сценариям методы `CreateJob` и `GetJobByID`. Методы worker-сценариев не добавляются в порт до их реализации.
+
+Application не импортирует PostgreSQL или `database/sql`. Конкретный PostgreSQL adapter зависит от application-контракта, реализует `JobRepository` и переводит `sql.ErrNoRows` в нейтральную ошибку `application.ErrJobNotFound`. Такое направление зависимости является намеренным: внешний infrastructure adapter зависит от внутреннего порта, а связывание конкретных реализаций должно происходить в `cmd`.
+
+Application-сценарии покрыты table-driven unit-тестами через fake repository. Тесты проверяют успешные операции, доменную валидацию до обращения в storage, передачу аргументов и `context.Context`, а также сохранение цепочки ошибок через `%w` и `errors.Is`.
 
 ## 4. Доменная модель Job
 
@@ -411,6 +425,8 @@ GET  /jobs/{id}
 - `POST /jobs` создаёт и сохраняет задачу.
 - `GET /jobs/{id}` возвращает задачу и её текущее состояние.
 
+Необходимые для этих endpoint application-сценарии `CreateJob` и `GetJobByID` уже реализованы. HTTP handlers должны вызывать их через application API и не обращаться к PostgreSQL repository напрямую. `ErrJobNotFound` позволяет будущему transport-слою отличить отсутствие задачи от прочих ошибок без зависимости от `database/sql`.
+
 Форматы request/response, HTTP-коды ошибок, валидация payload и способ передачи idempotency key ещё не определены.
 
 В будущем пользователю потребуется возможность:
@@ -439,10 +455,13 @@ GET  /jobs/{id}
 ### Этап 2 — создание и получение задач
 
 - [x] Реализовать PostgreSQL repository для создания, получения и обновления Job.
+- [x] Определить application port `JobRepository`.
+- [x] Реализовать application-сценарии `CreateJob` и `GetJobByID`.
+- [x] Покрыть application-сценарии table-driven unit-тестами.
 - [ ] Реализовать `POST /jobs`.
 - [ ] Реализовать `GET /jobs/{id}`.
-- [ ] Отделить HTTP transport от application и storage.
-- [ ] Покрыть repository и HTTP-сценарии тестами.
+- [ ] Реализовать HTTP transport поверх application без прямого доступа к storage.
+- [ ] Покрыть repository и HTTP-сценарии интеграционными тестами.
 
 Результат: клиент может поставить задачу и прочитать её состояние.
 
@@ -519,6 +538,7 @@ GET  /jobs/{id}
 - Модульный монолит до появления явной причины для разделения.
 - Domain не зависит от HTTP, PostgreSQL, goroutines и инфраструктурных библиотек.
 - Application layer оркестрирует сценарии; transport и storage остаются adapters.
+- Application владеет портами, а конкретные infrastructure adapters зависят от этих контрактов и связываются в `cmd`.
 - PostgreSQL — durable store и очередь; Kafka не используется.
 - At-least-once execution плюс идемпотентные executors вместо обещания exactly-once.
 - Явная машина состояний и транзакционное изменение состояния.
