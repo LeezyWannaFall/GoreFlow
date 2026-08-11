@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/LeezyWannaFall/GoreFlow/internal/application"
 	"github.com/LeezyWannaFall/GoreFlow/internal/job"
 	"github.com/google/uuid"
 )
@@ -137,9 +138,9 @@ func (r *Repository) GetJobByID(ctx context.Context, id uuid.UUID) (job.Job, err
 	model, err := scanJob(r.db.QueryRowContext(ctx, query, id))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return job.Job{}, fmt.Errorf("job not found: %w", err)
+			return job.Job{}, application.ErrJobNotFound
 		}
-		return job.Job{}, fmt.Errorf("get job by ID: %w", err)
+		return job.Job{}, fmt.Errorf("query job by ID: %w", err)
 	}
 
 	return model, nil
