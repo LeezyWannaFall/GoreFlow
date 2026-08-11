@@ -1,0 +1,40 @@
+services:
+  app:
+    build: .
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
+  db:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  migrations:
+    image: postgres:15
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - PGPASSWORD=${DB_PASSWORD}
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        for migration in /migrations/*.up.sql; do
+          psql -h db -U ${DB_USER} -d ${DB_NAME} -f "$$migration" -v ON_ERROR_STOP=1
+        done
+    volumes:
+      - ./migrations:/migrations
