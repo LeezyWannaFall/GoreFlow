@@ -9,6 +9,11 @@ import (
 	"github.com/google/uuid"
 )
 
+var (
+	ErrInvalidJobType = errors.New("job type must not be empty")
+	ErrInvalidPayload = errors.New("invalid JSON payload")
+)
+
 type Status string
 
 const (
@@ -36,11 +41,11 @@ type Job struct {
 
 func NewJob(jobType string, payload json.RawMessage) (*Job, error) {
 	if strings.TrimSpace(jobType) == "" {
-		return nil, errors.New("job type must not be empty")
+		return nil, ErrInvalidJobType
 	}
 
 	if !json.Valid(payload) {
-		return nil, errors.New("invalid json format")
+		return nil, ErrInvalidPayload
 	}
 
 	now := time.Now().UTC()
