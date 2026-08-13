@@ -15,18 +15,11 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, destination any) error {
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 
-	// first attempt to decode
 	if err := decoder.Decode(destination); err != nil {
 		return fmt.Errorf("decode JSON body: %w", err)
 	}
 
-	/* 	second attempt to decode
-	if we have multiple json values like this:
-		{"type":"echo","payload":{}}
-		{"type":"another","payload":{}}
-	or:
-		{"type":"echo","payload":{}} garbage
-	*/
+	// Ensure that the request body contains exactly one JSON value.
 	if err := decoder.Decode(&struct{}{}); err != io.EOF {
 		if err == nil {
 			return fmt.Errorf("decode JSON body: multiple JSON values")
