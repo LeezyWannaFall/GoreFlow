@@ -1,5 +1,7 @@
 # GoreFlow
 
+English | [Русский](README.ru.md)
+
 GoreFlow is a Go service for durable background job execution. It stores jobs in PostgreSQL, exposes an HTTP API for creating and inspecting them, and is being built around explicit state transitions, concurrent job claiming, leases, and at-least-once execution.
 
 The project is intentionally designed as a modular monolith. PostgreSQL acts as both the durable store and the job queue, so no external message broker is required.
@@ -27,19 +29,43 @@ The project is intentionally designed as a modular monolith. PostgreSQL acts as 
 GoreFlow keeps business rules independent from HTTP, PostgreSQL, goroutines, and concrete infrastructure libraries.
 
 ```mermaid
-flowchart LR
-    Client -->|HTTP| Transport[HTTP transport]
-    Transport --> Application[Application layer]
-    Application --> Domain[Job domain]
-    Application --> Port[Repository port]
-    PostgreSQLAdapter[PostgreSQL adapter] -->|implements| Port
-    PostgreSQLAdapter --> PostgreSQL[(PostgreSQL)]
+flowchart TB
+    Client([Client])
 
-    Worker[Worker process] --> Processor[Application processor]
-    Processor --> Registry[Executor registry]
-    Registry --> Echo[Echo executor]
-    Processor --> Port
+    subgraph APIProcess[HTTP API process · cmd/app]
+        direction LR
+        Transport[HTTP transport]
+        UseCases[Application use cases<br/>CreateJob · GetJobByID]
+        Transport --> UseCases
+    end
+
+    subgraph WorkerProcess[Worker process · cmd/worker]
+        direction LR
+        Poller[Polling loop]
+        Processor[ProcessNextJob]
+        Registry[Executor registry]
+        Echo[Echo executor]
+        Poller --> Processor --> Registry --> Echo
+    end
+
+    subgraph Domain[Domain]
+        Job[Job entity<br/>lifecycle rules]
+    end
+
+    subgraph Infrastructure[PostgreSQL infrastructure]
+        Repository[PostgreSQL repository<br/>implements application ports]
+        PostgreSQL[(PostgreSQL)]
+        Repository -->|SQL + transactions| PostgreSQL
+    end
+
+    Client -->|HTTP| Transport
+    UseCases -->|creates and reads| Job
+    Processor -->|starts, completes, or fails| Job
+    UseCases -->|JobRepository| Repository
+    Processor -->|WorkerJobRepository| Repository
 ```
+
+The repository ports are Go interfaces owned by the application layer. `internal/storage/postgres.Repository` is their PostgreSQL implementation: it translates repository calls into SQL, transactions, and row mapping. It is not a separate service. The API and worker processes each create a repository instance and use the same PostgreSQL database.
 
 Layer responsibilities:
 
