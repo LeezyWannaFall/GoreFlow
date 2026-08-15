@@ -30,39 +30,20 @@ GoreFlow keeps business rules independent from HTTP, PostgreSQL, goroutines, and
 
 ```mermaid
 flowchart TB
-    Client([Client])
+    Client([Client]) -->|HTTP| API[HTTP transport<br/>cmd/app]
+    API --> UseCases[Application use cases<br/>CreateJob · GetJobByID]
 
-    subgraph APIProcess[HTTP API process · cmd/app]
-        direction LR
-        Transport[HTTP transport]
-        UseCases[Application use cases<br/>CreateJob · GetJobByID]
-        Transport --> UseCases
-    end
+    Worker[Worker loop<br/>cmd/worker] --> Processor[JobProcessor<br/>ProcessNextJob]
+    Processor --> Registry[Executor registry]
+    Registry --> Echo[Echo executor]
 
-    subgraph WorkerProcess[Worker process · cmd/worker]
-        direction LR
-        Poller[Polling loop]
-        Processor[ProcessNextJob]
-        Registry[Executor registry]
-        Echo[Echo executor]
-        Poller --> Processor --> Registry --> Echo
-    end
+    UseCases --> Job[Job domain<br/>internal/job]
+    Processor --> Job
 
-    subgraph Domain[Domain]
-        Job[Job entity<br/>lifecycle rules]
-    end
-
-    subgraph Infrastructure[PostgreSQL infrastructure]
-        Repository[PostgreSQL repository<br/>implements application ports]
-        PostgreSQL[(PostgreSQL)]
-        Repository -->|SQL + transactions| PostgreSQL
-    end
-
-    Client -->|HTTP| Transport
-    UseCases -->|creates and reads| Job
-    Processor -->|starts, completes, or fails| Job
+    Repository[PostgreSQL repository<br/>internal/storage/postgres]
     UseCases -->|JobRepository| Repository
     Processor -->|WorkerJobRepository| Repository
+    Repository -->|SQL + transactions| PostgreSQL[(PostgreSQL)]
 ```
 
 The repository ports are Go interfaces owned by the application layer. `internal/storage/postgres.Repository` is their PostgreSQL implementation: it translates repository calls into SQL, transactions, and row mapping. It is not a separate service. The API and worker processes each create a repository instance and use the same PostgreSQL database.

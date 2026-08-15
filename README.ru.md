@@ -30,39 +30,20 @@ GoreFlow — сервис на Go для надёжного выполнения
 
 ```mermaid
 flowchart TB
-    Client([Клиент])
+    Client([Клиент]) -->|HTTP| API[HTTP transport<br/>cmd/app]
+    API --> UseCases[Application-сценарии<br/>CreateJob · GetJobByID]
 
-    subgraph APIProcess[HTTP API процесс · cmd/app]
-        direction LR
-        Transport[HTTP transport]
-        UseCases[Application-сценарии<br/>CreateJob · GetJobByID]
-        Transport --> UseCases
-    end
+    Worker[Worker loop<br/>cmd/worker] --> Processor[JobProcessor<br/>ProcessNextJob]
+    Processor --> Registry[Executor registry]
+    Registry --> Echo[Echo executor]
 
-    subgraph WorkerProcess[Worker процесс · cmd/worker]
-        direction LR
-        Poller[Polling loop]
-        Processor[ProcessNextJob]
-        Registry[Executor registry]
-        Echo[Echo executor]
-        Poller --> Processor --> Registry --> Echo
-    end
+    UseCases --> Job[Job domain<br/>internal/job]
+    Processor --> Job
 
-    subgraph Domain[Domain]
-        Job[Сущность Job<br/>правила жизненного цикла]
-    end
-
-    subgraph Infrastructure[PostgreSQL infrastructure]
-        Repository[PostgreSQL repository<br/>реализует application ports]
-        PostgreSQL[(PostgreSQL)]
-        Repository -->|SQL и транзакции| PostgreSQL
-    end
-
-    Client -->|HTTP| Transport
-    UseCases -->|создаёт и читает| Job
-    Processor -->|запускает, завершает или проваливает| Job
+    Repository[PostgreSQL repository<br/>internal/storage/postgres]
     UseCases -->|JobRepository| Repository
     Processor -->|WorkerJobRepository| Repository
+    Repository -->|SQL и транзакции| PostgreSQL[(PostgreSQL)]
 ```
 
 Repository ports — это Go-интерфейсы, принадлежащие application-слою. `internal/storage/postgres.Repository` является их PostgreSQL-реализацией: преобразует вызовы repository в SQL, транзакции и маппинг строк. Это не отдельный сервис. API и worker создают собственные экземпляры repository и используют одну базу данных PostgreSQL.
