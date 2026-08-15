@@ -87,6 +87,9 @@ func (r *Repository) ClaimJob(ctx context.Context, workerID string, now time.Tim
 
 	model, err := scanJob(tx.QueryRowContext(ctx, selectQuery, job.StatusQueued, now))
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return job.Job{}, application.ErrNoJobAvailable
+		}
 		return job.Job{}, fmt.Errorf("select job for claim: %w", err)
 	}
 
