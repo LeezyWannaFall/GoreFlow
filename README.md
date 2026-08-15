@@ -22,7 +22,7 @@ The project is intentionally designed as a modular monolith. PostgreSQL acts as 
 - Polling worker with an idle interval, per-process worker ID, leases, and signal-based graceful shutdown.
 - HTTP server timeouts and graceful shutdown on `SIGINT` or `SIGTERM`.
 - Docker Compose environment with the API, worker, PostgreSQL, and automatic migrations.
-- Table-driven unit tests for the application, HTTP, executor, registry, and worker layers.
+- Table-driven unit tests for the Job domain, application, HTTP, executor, registry, and worker layers.
 
 ## Architecture
 
@@ -213,13 +213,15 @@ SELECT id, type, payload, status, attempt, max_attempts,
        run_after, locked_by, lease_until, result, error,
        created_at, updated_at
 FROM jobs
-WHERE status = 'queued'
-  AND run_after <= time.Now()
+WHERE status = $1
+  AND run_after <= $2
   AND attempt < max_attempts
 ORDER BY run_after, created_at
 FOR UPDATE SKIP LOCKED
 LIMIT 1;
 ```
+
+The claim operation passes `queued` as `$1` and the current claim time as `$2`.
 
 The selected row is changed to `running` before the transaction commits. `SKIP LOCKED` allows multiple workers to skip rows already claimed by another transaction instead of waiting for the same job.
 
@@ -240,6 +242,8 @@ Run unit tests with the race detector:
 ```bash
 go test -race ./...
 ```
+
+The Job domain tests cover construction, successful lifecycle transitions, validation failures, timestamp and lease updates, and the invariant that a rejected transition must not partially mutate a Job.
 
 The complete Docker Compose flow has been verified manually: an `echo` job created through `POST /jobs` was claimed by the worker, changed to `succeeded`, and returned the original payload in `result` through `GET /jobs/{id}`. The PostgreSQL repository and this end-to-end flow do not yet have automated integration coverage.
 
@@ -265,6 +269,7 @@ The complete Docker Compose flow has been verified manually: an `echo` job creat
 ## Roadmap to the first MVP
 
 - [x] Job domain model and PostgreSQL migration.
+- [x] Job domain lifecycle unit tests.
 - [x] PostgreSQL repository and transactional claim operation.
 - [x] Application use cases for creating and reading jobs.
 - [x] HTTP API with graceful shutdown.
