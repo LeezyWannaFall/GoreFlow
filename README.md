@@ -41,8 +41,8 @@ flowchart TB
     Processor --> Job
 
     Repository[PostgreSQL repository<br/>internal/storage/postgres]
-    UseCases -->|JobRepository| Repository
-    Processor -->|WorkerJobRepository| Repository
+    UseCases --> Repository
+    Processor --> Repository
     Repository -->|SQL + transactions| PostgreSQL[(PostgreSQL)]
 ```
 
