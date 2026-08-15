@@ -214,7 +214,7 @@ SELECT id, type, payload, status, attempt, max_attempts,
        created_at, updated_at
 FROM jobs
 WHERE status = 'queued'
-  AND run_after <= now()
+  AND run_after <= time.Now()
   AND attempt < max_attempts
 ORDER BY run_after, created_at
 FOR UPDATE SKIP LOCKED
