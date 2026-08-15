@@ -102,7 +102,7 @@ cp .env.example .env
 Собери и запусти API, worker, PostgreSQL и миграции:
 
 ```bash
-docker compose -f docker-compose.yaml up --build
+docker compose up --build
 ```
 
 API будет доступен по адресу `http://localhost:8080`.
@@ -116,7 +116,7 @@ curl -i http://localhost:8080/health
 Для остановки окружения выполни:
 
 ```bash
-docker compose -f docker-compose.yaml down
+docker compose down
 ```
 
 Текущая конфигурация Compose не подключает постоянный volume для PostgreSQL. Контейнер миграций также является временным решением: он выполняет каждый файл `*.up.sql`, но не ведёт таблицу версий миграций.

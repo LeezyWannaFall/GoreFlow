@@ -102,7 +102,7 @@ cp .env.example .env
 Build and start the API, worker, PostgreSQL, and migrations:
 
 ```bash
-docker compose -f docker-compose.yaml up --build
+docker compose up --build
 ```
 
 The API will be available at `http://localhost:8080`.
@@ -116,7 +116,7 @@ curl -i http://localhost:8080/health
 Stop the environment:
 
 ```bash
-docker compose -f docker-compose.yaml down
+docker compose down
 ```
 
 The current Compose setup does not attach a persistent PostgreSQL volume. The migration container is a temporary runner that executes every `*.up.sql` file without maintaining a migration version table.
