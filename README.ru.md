@@ -22,7 +22,7 @@ GoreFlow — сервис на Go для надёжного выполнения
 - Polling worker с интервалом ожидания пустой очереди, уникальным ID процесса, lease и graceful shutdown по системному сигналу.
 - Таймауты HTTP-сервера и graceful shutdown по `SIGINT` или `SIGTERM`.
 - Docker Compose окружение с API, worker, PostgreSQL и автоматическим запуском миграций.
-- Table-driven unit-тесты для application, HTTP, executor, registry и worker слоёв.
+- Table-driven unit-тесты для Job domain, application, HTTP, executor, registry и worker слоёв.
 
 ## Архитектура
 
@@ -213,13 +213,15 @@ SELECT id, type, payload, status, attempt, max_attempts,
        run_after, locked_by, lease_until, result, error,
        created_at, updated_at
 FROM jobs
-WHERE status = 'queued'
-  AND run_after <= time.Now()
+WHERE status = $1
+  AND run_after <= $2
   AND attempt < max_attempts
 ORDER BY run_after, created_at
 FOR UPDATE SKIP LOCKED
 LIMIT 1;
 ```
+
+Операция claim передаёт статус `queued` как `$1`, а текущее время захвата — как `$2`.
 
 Выбранная строка меняет статус на `running` до commit транзакции. Благодаря `SKIP LOCKED` несколько workers пропускают строки, уже захваченные другой транзакцией, вместо ожидания одной и той же задачи.
 
@@ -240,6 +242,8 @@ go test ./...
 ```bash
 go test -race ./...
 ```
+
+Domain-тесты Job проверяют создание, успешные переходы жизненного цикла, ошибки валидации, обновление времени и lease, а также инвариант: отклонённый переход не должен частично изменять Job.
 
 Полный Docker Compose-сценарий проверен вручную: `echo`-задача, созданная через `POST /jobs`, была захвачена worker-ом, перешла в `succeeded` и вернула исходный payload в поле `result` через `GET /jobs/{id}`. PostgreSQL repository и этот end-to-end сценарий пока не имеют автоматизированного интеграционного покрытия.
 
@@ -265,6 +269,7 @@ go test -race ./...
 ## План первого MVP
 
 - [x] Доменная модель Job и миграция PostgreSQL.
+- [x] Unit-тесты жизненного цикла Job.
 - [x] PostgreSQL repository и транзакционный claim.
 - [x] Application-сценарии создания и получения задач.
 - [x] HTTP API с graceful shutdown.
