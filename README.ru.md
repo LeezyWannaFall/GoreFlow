@@ -7,7 +7,7 @@ GoreFlow — сервис на Go для надёжного выполнения
 Проект намеренно разрабатывается как модульный монолит. PostgreSQL одновременно служит постоянным хранилищем и очередью задач, поэтому отдельный брокер сообщений не требуется.
 
 > [!IMPORTANT]
-> GoreFlow находится в активной разработке. HTTP API и worker запускаются как отдельные процессы и уже поддерживают первый полный сценарий выполнения `echo`-задачи. Автоматизированного интеграционного теста полного сценария пока нет.
+> GoreFlow находится в активной разработке. HTTP API и worker запускаются как отдельные процессы и уже поддерживают первый полный сценарий выполнения `echo`-задачи, покрытый black-box end-to-end тестом.
 
 ## Текущие возможности
 
@@ -23,6 +23,7 @@ GoreFlow — сервис на Go для надёжного выполнения
 - Таймауты HTTP-сервера и graceful shutdown по `SIGINT` или `SIGTERM`.
 - Docker Compose окружение с API, worker, PostgreSQL и автоматическим запуском миграций.
 - Table-driven unit-тесты для Job domain, application, HTTP, executor, registry и worker слоёв.
+- Black-box end-to-end тест полного сценария выполнения `echo`-задачи.
 
 ## Архитектура
 
@@ -243,9 +244,17 @@ go test ./...
 go test -race ./...
 ```
 
+Запуск end-to-end теста поверх Docker Compose окружения:
+
+```bash
+docker compose up --build -d
+go test -tags=e2e -count=1 -v ./tests/e2e
+docker compose down
+```
+
 Domain-тесты Job проверяют создание, успешные переходы жизненного цикла, ошибки валидации, обновление времени и lease, а также инвариант: отклонённый переход не должен частично изменять Job.
 
-Полный Docker Compose-сценарий проверен вручную: `echo`-задача, созданная через `POST /jobs`, была захвачена worker-ом, перешла в `succeeded` и вернула исходный payload в поле `result` через `GET /jobs/{id}`. PostgreSQL repository и этот end-to-end сценарий пока не имеют автоматизированного интеграционного покрытия.
+Black-box end-to-end тест ожидает готовности API, создаёт `echo`-задачу через `POST /jobs`, опрашивает `GET /jobs/{id}` до перехода задачи в терминальный статус и проверяет сохранение исходного payload в `result`, увеличение attempt и очистку метаданных владения. Для запуска теста требуется работающее Docker Compose окружение. Отдельного интеграционного покрытия PostgreSQL repository пока нет.
 
 ## Структура проекта
 
@@ -262,6 +271,7 @@ Domain-тесты Job проверяют создание, успешные пе
 │   ├── transport/http/         # HTTP DTO и handlers
 │   └── worker/                 # Polling loop и жизненный цикл worker
 ├── migrations/                 # Up/down миграции PostgreSQL
+├── tests/e2e/                  # Black-box end-to-end тест
 ├── Dockerfile
 └── docker-compose.yaml
 ```
@@ -277,7 +287,7 @@ Domain-тесты Job проверяют создание, успешные пе
 - [x] Polling worker и выбор executor.
 - [x] Сохранение успешного результата и ошибки выполнения.
 - [x] Graceful shutdown worker-а.
-- [ ] End-to-end интеграционный тест.
+- [x] End-to-end интеграционный тест.
 
 После первого вертикального среза проект будет развиваться в сторону heartbeat для leases, crash recovery, retries с backoff и jitter, cancellation, idempotency и observability.
 

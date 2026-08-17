@@ -450,7 +450,7 @@ GET  /health
 
 Тело запроса ограничено одним MiB, должно содержать ровно одно JSON-значение и не может содержать неизвестные поля. Ошибочное тело, некорректные данные Job и некорректный UUID получают `400 Bad Request`; отсутствующая Job — `404 Not Found`; неожиданная внутренняя ошибка — `500 Internal Server Error`. Ошибки имеют форму `{"error":"message"}`. Способ передачи будущего idempotency key пока не определён.
 
-HTTP handlers покрыты table-driven unit-тестами через fake application service. Полный Docker Compose-сценарий проверен вручную: созданная через `POST /jobs` задача типа `echo` была захвачена worker-ом, перешла из `queued` в `succeeded`, сохранила исходный payload в `result` и была прочитана через `GET /jobs/{id}` с очищенными `locked_by` и `lease_until`. Автоматизированный интеграционный тест этого сценария ещё не реализован.
+HTTP handlers покрыты table-driven unit-тестами через fake application service. Полный Docker Compose-сценарий покрыт black-box end-to-end тестом с build tag `e2e`: тест ожидает готовности API, создаёт через `POST /jobs` задачу типа `echo`, опрашивает `GET /jobs/{id}` до терминального статуса и проверяет переход в `succeeded`, сохранение исходного payload в `result`, увеличение attempt и очистку `locked_by` и `lease_until`. Тест запускается отдельно поверх работающего Docker Compose окружения командой `go test -tags=e2e -count=1 -v ./tests/e2e`. Отдельные интеграционные тесты PostgreSQL repository ещё не реализованы.
 
 В будущем пользователю потребуется возможность:
 
@@ -497,7 +497,7 @@ HTTP handlers покрыты table-driven unit-тестами через fake ap
 - [x] Покрыть executor и registry unit-тестами.
 - [x] Сохранять успешный результат и ошибку.
 - [x] Добавить graceful shutdown worker.
-- [ ] Добавить интеграционный тест полного сценария.
+- [x] Добавить интеграционный тест полного сценария.
 
 Результат: завершён MVP и первый вертикальный срез.
 
