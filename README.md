@@ -7,7 +7,7 @@ GoreFlow is a Go service for durable background job execution. It stores jobs in
 The project is intentionally designed as a modular monolith. PostgreSQL acts as both the durable store and the job queue, so no external message broker is required.
 
 > [!IMPORTANT]
-> GoreFlow is currently under active development. The HTTP API and the worker run as separate processes and can execute the first complete `echo` job flow. The complete flow does not yet have an automated integration test.
+> GoreFlow is currently under active development. The HTTP API and the worker run as separate processes and can execute the first complete `echo` job flow, which is covered by a black-box end-to-end test.
 
 ## Current capabilities
 
@@ -23,6 +23,7 @@ The project is intentionally designed as a modular monolith. PostgreSQL acts as 
 - HTTP server timeouts and graceful shutdown on `SIGINT` or `SIGTERM`.
 - Docker Compose environment with the API, worker, PostgreSQL, and automatic migrations.
 - Table-driven unit tests for the Job domain, application, HTTP, executor, registry, and worker layers.
+- Black-box end-to-end coverage for the complete `echo` job flow.
 
 ## Architecture
 
@@ -243,9 +244,17 @@ Run unit tests with the race detector:
 go test -race ./...
 ```
 
+Run the end-to-end test against the Docker Compose environment:
+
+```bash
+docker compose up --build -d
+go test -tags=e2e -count=1 -v ./tests/e2e
+docker compose down
+```
+
 The Job domain tests cover construction, successful lifecycle transitions, validation failures, timestamp and lease updates, and the invariant that a rejected transition must not partially mutate a Job.
 
-The complete Docker Compose flow has been verified manually: an `echo` job created through `POST /jobs` was claimed by the worker, changed to `succeeded`, and returned the original payload in `result` through `GET /jobs/{id}`. The PostgreSQL repository and this end-to-end flow do not yet have automated integration coverage.
+The black-box end-to-end test waits for the API, creates an `echo` job through `POST /jobs`, polls `GET /jobs/{id}` until the job reaches a terminal state, and verifies that the worker persisted the original payload in `result`, incremented the attempt, and cleared the ownership metadata. The test requires the Docker Compose environment to be running. The PostgreSQL repository does not yet have dedicated integration coverage.
 
 ## Project structure
 
@@ -262,6 +271,7 @@ The complete Docker Compose flow has been verified manually: an `echo` job creat
 │   ├── transport/http/         # HTTP DTOs and handlers
 │   └── worker/                 # Polling loop and worker lifecycle
 ├── migrations/                 # PostgreSQL up/down migrations
+├── tests/e2e/                  # Black-box end-to-end test
 ├── Dockerfile
 └── docker-compose.yaml
 ```
@@ -277,7 +287,7 @@ The complete Docker Compose flow has been verified manually: an `echo` job creat
 - [x] Worker polling and executor dispatch.
 - [x] Persistence of successful results and execution errors.
 - [x] Worker graceful shutdown.
-- [ ] End-to-end integration test.
+- [x] End-to-end integration test.
 
 After the first vertical slice, the project will move toward heartbeat-based leases, crash recovery, retries with backoff and jitter, cancellation, idempotency, and observability.
 
