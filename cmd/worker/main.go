@@ -15,6 +15,7 @@ import (
 
 	"github.com/LeezyWannaFall/GoreFlow/internal/application"
 	"github.com/LeezyWannaFall/GoreFlow/internal/executor"
+	"github.com/LeezyWannaFall/GoreFlow/internal/executor/echo"
 	"github.com/LeezyWannaFall/GoreFlow/internal/storage/postgres"
 	"github.com/LeezyWannaFall/GoreFlow/internal/worker"
 )
@@ -35,7 +36,7 @@ func main() {
 	repo := postgres.NewRepository(db)
 
 	registry := executor.NewRegistry()
-	err = registry.Register("echo", executor.NewEchoExecutor())
+	err = registry.Register("echo", echo.NewEchoExecutor())
 	if err != nil {
 		log.Fatalf("Failed to register executor: %v", err)
 	}
