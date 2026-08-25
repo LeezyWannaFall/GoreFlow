@@ -16,7 +16,7 @@ func (e *registryTestExecutor) Execute(context.Context, json.RawMessage) (json.R
 
 func TestRegistry_RegisterAndGet(t *testing.T) {
 	registry := NewRegistry()
-	echoExecutor := NewEchoExecutor()
+	echoExecutor := &registryTestExecutor{}
 
 	if err := registry.Register("echo", echoExecutor); err != nil {
 		t.Fatalf("Register() unexpected error = %v", err)
