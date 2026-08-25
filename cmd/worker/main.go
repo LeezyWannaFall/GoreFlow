@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -16,6 +17,7 @@ import (
 	"github.com/LeezyWannaFall/GoreFlow/internal/application"
 	"github.com/LeezyWannaFall/GoreFlow/internal/executor"
 	"github.com/LeezyWannaFall/GoreFlow/internal/executor/echo"
+	"github.com/LeezyWannaFall/GoreFlow/internal/executor/webhook"
 	"github.com/LeezyWannaFall/GoreFlow/internal/storage/postgres"
 	"github.com/LeezyWannaFall/GoreFlow/internal/worker"
 )
@@ -36,8 +38,19 @@ func main() {
 	repo := postgres.NewRepository(db)
 
 	registry := executor.NewRegistry()
-	err = registry.Register("echo", echo.NewEchoExecutor())
+	webhookClient := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+	webhookExecutor, err := webhook.NewWebhookExecutor(webhookClient)
 	if err != nil {
+		log.Fatalf("Failed to create webhook executor: %v", err)
+	}
+
+	if err := registry.Register("webhook", webhookExecutor); err != nil {
+		log.Fatalf("Failed to register webhook executor: %v", err)
+	}
+
+	if err := registry.Register("echo", echo.NewEchoExecutor()); err != nil {
 		log.Fatalf("Failed to register executor: %v", err)
 	}
 
