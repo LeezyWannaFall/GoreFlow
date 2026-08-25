@@ -7,7 +7,7 @@ GoreFlow is a Go service for durable background job execution. It stores jobs in
 The project is intentionally designed as a modular monolith. PostgreSQL acts as both the durable store and the job queue, so no external message broker is required.
 
 > [!IMPORTANT]
-> GoreFlow is currently under active development. The HTTP API and the worker run as separate processes and can execute the first complete `echo` job flow, which is covered by a black-box end-to-end test.
+> GoreFlow is currently under active development. The HTTP API and the worker run as separate processes. The complete `echo` job flow is covered by a black-box end-to-end test, and outbound webhook delivery is available as the second executor.
 
 ## Current capabilities
 
@@ -18,6 +18,7 @@ The project is intentionally designed as a modular monolith. PostgreSQL acts as 
 - Worker ownership metadata through `locked_by` and `lease_until`.
 - Generic executor contract and type-based executor registry.
 - Idempotent `echo` executor that returns its JSON payload unchanged.
+- `webhook` executor that sends JSON through an HTTP POST request and stores the remote response.
 - Application processor that dispatches claimed jobs by type and persists their result or error.
 - Polling worker with an idle interval, per-process worker ID, leases, and signal-based graceful shutdown.
 - HTTP server timeouts and graceful shutdown on `SIGINT` or `SIGTERM`.
@@ -37,6 +38,7 @@ flowchart TB
     Worker[Worker loop<br/>cmd/worker] --> Processor[JobProcessor<br/>ProcessNextJob]
     Processor --> Registry[Executor registry]
     Registry --> Echo[Echo executor]
+    Registry --> Webhook[Webhook executor]
 
     UseCases --> Job[Job domain<br/>internal/job]
     Processor --> Job
@@ -205,6 +207,28 @@ Errors use a consistent JSON shape:
 | `404 Not Found` | No job exists with the requested ID. |
 | `500 Internal Server Error` | An unexpected application or storage error occurred. |
 
+## Executors
+
+The `echo` executor accepts any valid JSON payload and returns it unchanged. The `webhook` executor accepts a destination URL and a JSON body:
+
+```bash
+curl -i \
+  -X POST http://localhost:8080/jobs \
+  -H 'Content-Type: application/json' \
+  -d '{"type":"webhook","payload":{"url":"https://example.com/callback","body":{"message":"hello"}}}'
+```
+
+The worker sends the nested `body` with an HTTP POST request and `Content-Type: application/json`. Every `2xx` status is considered successful. The stored job result contains the remote status and response body:
+
+```json
+{
+  "status_code": 200,
+  "body": "{\"accepted\":true}"
+}
+```
+
+Webhook responses are limited to 1 MiB and the worker uses a shared HTTP client with a ten-second timeout. The current version does not yet restrict private or local network destinations, so the webhook executor must only be exposed to trusted clients until SSRF protection is implemented.
+
 ## Concurrent job claiming
 
 PostgreSQL is used as the queue. A worker claims one eligible job inside a transaction using:
@@ -228,7 +252,7 @@ The selected row is changed to `running` before the transaction commits. `SKIP L
 
 The application processor claims one job, resolves its executor from the registry, runs it, and persists either the successful result or the execution error. The worker calls this processor continuously: it immediately asks for another job after completed work and waits for its polling interval only while the queue is empty.
 
-The current `cmd/worker` entry point registers the `echo` executor, creates a unique worker ID, uses a five-second idle polling interval and a 30-second lease, and shuts down on `SIGINT` or `SIGTERM`. These values are initial executable defaults rather than a finalized runtime configuration contract.
+The current `cmd/worker` entry point registers the `echo` and `webhook` executors, creates a unique worker ID, uses a five-second idle polling interval and a 30-second lease, and shuts down on `SIGINT` or `SIGTERM`. The webhook executor receives a shared HTTP client with a ten-second timeout. These values are initial executable defaults rather than a finalized runtime configuration contract.
 
 ## Testing
 
@@ -254,6 +278,8 @@ docker compose down
 
 The Job domain tests cover construction, successful lifecycle transitions, validation failures, timestamp and lease updates, and the invariant that a rejected transition must not partially mutate a Job.
 
+Webhook executor tests cover request construction, payload and URL validation, successful `2xx` delivery, remote `4xx` and `5xx` responses, transport failures, oversized response bodies, and context cancellation.
+
 The black-box end-to-end test waits for the API, creates an `echo` job through `POST /jobs`, polls `GET /jobs/{id}` until the job reaches a terminal state, and verifies that the worker persisted the original payload in `result`, incremented the attempt, and cleared the ownership metadata. The test requires the Docker Compose environment to be running. The PostgreSQL repository does not yet have dedicated integration coverage.
 
 ## Project structure
@@ -265,7 +291,7 @@ The black-box end-to-end test waits for the API, creates an `echo` job through `
 ├── docs/                       # Architecture and project decisions
 ├── internal/
 │   ├── application/            # Use-case orchestration and ports
-│   ├── executor/               # Executor contract, registry, and echo
+│   ├── executor/               # Executor contract, registry, echo, and webhook
 │   ├── job/                    # Domain model and state transitions
 │   ├── storage/postgres/       # PostgreSQL repository
 │   ├── transport/http/         # HTTP DTOs and handlers
@@ -276,7 +302,7 @@ The black-box end-to-end test waits for the API, creates an `echo` job through `
 └── docker-compose.yaml
 ```
 
-## Roadmap to the first MVP
+## Roadmap
 
 - [x] Job domain model and PostgreSQL migration.
 - [x] Job domain lifecycle unit tests.
@@ -288,8 +314,9 @@ The black-box end-to-end test waits for the API, creates an `echo` job through `
 - [x] Persistence of successful results and execution errors.
 - [x] Worker graceful shutdown.
 - [x] End-to-end integration test.
+- [x] Outbound webhook executor with response limits and unit coverage.
 
-After the first vertical slice, the project will move toward heartbeat-based leases, crash recovery, retries with backoff and jitter, cancellation, idempotency, and observability.
+Next stages focus on SSRF protection for webhook delivery, automated CI checks, lease ownership and fencing, heartbeat-based renewal, crash recovery, retries with backoff and jitter, cancellation, idempotency, and observability.
 
 ## Design principles
 

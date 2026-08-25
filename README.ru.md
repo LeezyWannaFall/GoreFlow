@@ -7,7 +7,7 @@ GoreFlow — сервис на Go для надёжного выполнения
 Проект намеренно разрабатывается как модульный монолит. PostgreSQL одновременно служит постоянным хранилищем и очередью задач, поэтому отдельный брокер сообщений не требуется.
 
 > [!IMPORTANT]
-> GoreFlow находится в активной разработке. HTTP API и worker запускаются как отдельные процессы и уже поддерживают первый полный сценарий выполнения `echo`-задачи, покрытый black-box end-to-end тестом.
+> GoreFlow находится в активной разработке. HTTP API и worker запускаются как отдельные процессы. Полный сценарий выполнения `echo`-задачи покрыт black-box end-to-end тестом, а для исходящих HTTP-вызовов уже доступен второй executor — `webhook`.
 
 ## Текущие возможности
 
@@ -18,6 +18,7 @@ GoreFlow — сервис на Go для надёжного выполнения
 - Метаданные владения задачей через `locked_by` и `lease_until`.
 - Общий контракт executor и registry для выбора executor по типу задачи.
 - Идемпотентный `echo` executor, возвращающий входной JSON без изменений.
+- `webhook` executor, который отправляет JSON через HTTP POST и сохраняет ответ удалённого сервиса.
 - Application processor, который выбирает executor и сохраняет результат или ошибку выполнения.
 - Polling worker с интервалом ожидания пустой очереди, уникальным ID процесса, lease и graceful shutdown по системному сигналу.
 - Таймауты HTTP-сервера и graceful shutdown по `SIGINT` или `SIGTERM`.
@@ -37,6 +38,7 @@ flowchart TB
     Worker[Worker loop<br/>cmd/worker] --> Processor[JobProcessor<br/>ProcessNextJob]
     Processor --> Registry[Executor registry]
     Registry --> Echo[Echo executor]
+    Registry --> Webhook[Webhook executor]
 
     UseCases --> Job[Job domain<br/>internal/job]
     Processor --> Job
@@ -205,6 +207,28 @@ curl -i http://localhost:8080/jobs/a61a9ae1-cfe1-4667-886f-4f32b804ef2f
 | `404 Not Found` | Job с указанным ID не существует. |
 | `500 Internal Server Error` | Неожиданная ошибка application или storage. |
 
+## Executors
+
+Executor `echo` принимает любой корректный JSON и возвращает его без изменений. Executor `webhook` принимает URL назначения и JSON-тело:
+
+```bash
+curl -i \
+  -X POST http://localhost:8080/jobs \
+  -H 'Content-Type: application/json' \
+  -d '{"type":"webhook","payload":{"url":"https://example.com/callback","body":{"message":"hello"}}}'
+```
+
+Worker отправляет вложенное поле `body` методом POST с заголовком `Content-Type: application/json`. Любой статус `2xx` считается успешным. В результате Job сохраняются статус и тело ответа удалённого сервиса:
+
+```json
+{
+  "status_code": 200,
+  "body": "{\"accepted\":true}"
+}
+```
+
+Размер ответа webhook ограничен одним MiB, а общий HTTP client worker-а использует таймаут десять секунд. Текущая версия пока не запрещает обращения к локальным и частным сетям, поэтому до реализации SSRF-защиты webhook executor следует предоставлять только доверенным клиентам.
+
 ## Конкурентный захват задач
 
 PostgreSQL используется как очередь. Worker захватывает одну подходящую задачу внутри транзакции:
@@ -228,7 +252,7 @@ LIMIT 1;
 
 Application processor захватывает Job, находит executor по типу, запускает его и сохраняет результат либо ошибку. Worker вызывает processor непрерывно: после обработанной задачи сразу запрашивает следующую, а при пустой очереди ожидает свой polling interval.
 
-Текущий `cmd/worker` регистрирует `echo` executor, создаёт уникальный ID worker-а, использует пятисекундный интервал ожидания пустой очереди и lease длительностью 30 секунд, а также завершает работу по `SIGINT` или `SIGTERM`. Эти значения являются начальными настройками executable, а не окончательным конфигурационным контрактом.
+Текущий `cmd/worker` регистрирует executors `echo` и `webhook`, создаёт уникальный ID worker-а, использует пятисекундный интервал ожидания пустой очереди и lease длительностью 30 секунд, а также завершает работу по `SIGINT` или `SIGTERM`. Webhook executor получает общий HTTP client с таймаутом десять секунд. Эти значения являются начальными настройками executable, а не окончательным конфигурационным контрактом.
 
 ## Тестирование
 
@@ -254,6 +278,8 @@ docker compose down
 
 Domain-тесты Job проверяют создание, успешные переходы жизненного цикла, ошибки валидации, обновление времени и lease, а также инвариант: отклонённый переход не должен частично изменять Job.
 
+Тесты webhook executor проверяют создание запроса, валидацию payload и URL, успешный ответ `2xx`, ответы `4xx` и `5xx`, транспортные ошибки, превышение ограничения тела ответа и отмену context.
+
 Black-box end-to-end тест ожидает готовности API, создаёт `echo`-задачу через `POST /jobs`, опрашивает `GET /jobs/{id}` до перехода задачи в терминальный статус и проверяет сохранение исходного payload в `result`, увеличение attempt и очистку метаданных владения. Для запуска теста требуется работающее Docker Compose окружение. Отдельного интеграционного покрытия PostgreSQL repository пока нет.
 
 ## Структура проекта
@@ -265,7 +291,7 @@ Black-box end-to-end тест ожидает готовности API, созд�
 ├── docs/                       # Архитектура и решения проекта
 ├── internal/
 │   ├── application/            # Оркестрация сценариев и ports
-│   ├── executor/               # Контракт executor, registry и echo
+│   ├── executor/               # Контракт executor, registry, echo и webhook
 │   ├── job/                    # Доменная модель и переходы состояния
 │   ├── storage/postgres/       # PostgreSQL repository
 │   ├── transport/http/         # HTTP DTO и handlers
@@ -276,7 +302,7 @@ Black-box end-to-end тест ожидает готовности API, созд�
 └── docker-compose.yaml
 ```
 
-## План первого MVP
+## Roadmap
 
 - [x] Доменная модель Job и миграция PostgreSQL.
 - [x] Unit-тесты жизненного цикла Job.
@@ -288,8 +314,9 @@ Black-box end-to-end тест ожидает готовности API, созд�
 - [x] Сохранение успешного результата и ошибки выполнения.
 - [x] Graceful shutdown worker-а.
 - [x] End-to-end интеграционный тест.
+- [x] Исходящий webhook executor с ограничением ответа и unit-тестами.
 
-После первого вертикального среза проект будет развиваться в сторону heartbeat для leases, crash recovery, retries с backoff и jitter, cancellation, idempotency и observability.
+Следующие этапы посвящены SSRF-защите webhook, автоматическим проверкам CI, проверке владельца lease и fencing, heartbeat, crash recovery, retries с backoff и jitter, cancellation, idempotency и observability.
 
 ## Принципы проектирования
 
