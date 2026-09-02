@@ -129,7 +129,6 @@ docker compose down
 | Переменная | Используется | Назначение |
 |---|---|---|
 | `DATABASE_URL` | API и worker | Строка подключения к PostgreSQL для обоих Go-процессов. |
-| `TEST_DATABASE_URL` | Интеграционные тесты | Доступная с host строка подключения для создания изолированных test schemas. |
 | `DB_USER` | Compose | Пользователь PostgreSQL для инициализации локальной БД. |
 | `DB_PASSWORD` | Compose | Пароль PostgreSQL для БД и контейнера миграций. |
 | `DB_NAME` | Compose | Имя локальной базы данных. |

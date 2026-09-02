@@ -129,7 +129,6 @@ The current Compose setup does not attach a persistent PostgreSQL volume. The mi
 | Variable | Used by | Description |
 |---|---|---|
 | `DATABASE_URL` | API and worker | PostgreSQL connection string used by both Go processes. |
-| `TEST_DATABASE_URL` | Integration tests | Host-accessible PostgreSQL connection string used to create isolated test schemas. |
 | `DB_USER` | Compose | PostgreSQL user used to initialize the local database. |
 | `DB_PASSWORD` | Compose | PostgreSQL password used by PostgreSQL and the migration container. |
 | `DB_NAME` | Compose | Name of the local PostgreSQL database. |
