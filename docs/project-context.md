@@ -453,7 +453,9 @@ GET  /health
 
 Тело запроса ограничено одним MiB, должно содержать ровно одно JSON-значение и не может содержать неизвестные поля. Ошибочное тело, некорректные данные Job и некорректный UUID получают `400 Bad Request`; отсутствующая Job — `404 Not Found`; неожиданная внутренняя ошибка — `500 Internal Server Error`. Ошибки имеют форму `{"error":"message"}`. Способ передачи будущего idempotency key пока не определён.
 
-HTTP handlers покрыты table-driven unit-тестами через fake application service. Полный Docker Compose-сценарий покрыт black-box end-to-end тестом с build tag `e2e`: тест ожидает готовности API, создаёт через `POST /jobs` задачу типа `echo`, опрашивает `GET /jobs/{id}` до терминального статуса и проверяет переход в `succeeded`, сохранение исходного payload в `result`, увеличение attempt и очистку `locked_by` и `lease_until`. Тест запускается отдельно поверх работающего Docker Compose окружения командой `go test -tags=e2e -count=1 -v ./tests/e2e`. Отдельные интеграционные тесты PostgreSQL repository ещё не реализованы.
+HTTP handlers покрыты table-driven unit-тестами через fake application service. Отдельный integration suite с build tag `integration` проверяет PostgreSQL repository на настоящей БД, включая create/get, claim/update, nullable mapping, отсутствие строки и соблюдение `RunAfter`. HTTP-интеграция поднимает настоящий router с application и PostgreSQL repository и проверяет создание, чтение и основные ошибочные ответы. Каждый тест создаёт изолированную PostgreSQL schema, применяет настоящую миграцию и удаляет schema после завершения. Suite запускается с `TEST_DATABASE_URL` командой `go test -tags=integration -count=1 -v ./tests/integration`.
+
+Полный Docker Compose-сценарий покрыт black-box end-to-end тестом с build tag `e2e`: тест ожидает готовности API, создаёт через `POST /jobs` задачу типа `echo`, опрашивает `GET /jobs/{id}` до терминального статуса и проверяет переход в `succeeded`, сохранение исходного payload в `result`, увеличение attempt и очистку `locked_by` и `lease_until`. Тест запускается отдельно поверх работающего Docker Compose окружения командой `go test -tags=e2e -count=1 -v ./tests/e2e`.
 
 В будущем пользователю потребуется возможность:
 
@@ -488,7 +490,7 @@ HTTP handlers покрыты table-driven unit-тестами через fake ap
 - [x] Реализовать `GET /jobs/{id}`.
 - [x] Реализовать HTTP transport поверх application без прямого доступа к storage.
 - [x] Покрыть HTTP handlers table-driven unit-тестами.
-- [ ] Покрыть repository и HTTP-сценарии интеграционными тестами.
+- [x] Покрыть repository и HTTP-сценарии интеграционными тестами.
 
 Результат: клиент может поставить задачу и прочитать её состояние.
 
@@ -570,9 +572,11 @@ HTTP handlers покрыты table-driven unit-тестами через fake ap
 - [ ] Определить DAG и правила разблокировки зависимых steps.
 - [ ] Добавить actions для внешних интеграций.
 - [ ] Добавить API и SSE для прогресса execution.
-- [ ] Добавить web-интерфейс со списком workflow, runs, steps, logs, retries и cancellation.
+- [ ] Согласовать frontend stack и контракты взаимодействия с workflow API.
+- [ ] Добавить web-интерфейс для создания и редактирования workflow.
+- [ ] Добавить экраны workflow, runs, steps, logs, retries и cancellation.
 
-Результат: очередь отдельных jobs развивается в систему выполнения многошаговых workflow.
+Результат: очередь отдельных jobs развивается в систему выполнения многошаговых workflow с пользовательским web-интерфейсом.
 
 ## 17. Архитектурные принципы
 

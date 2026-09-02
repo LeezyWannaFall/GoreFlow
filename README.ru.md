@@ -132,6 +132,7 @@ docker compose down
 | `DB_USER` | Compose | Пользователь PostgreSQL для инициализации локальной БД. |
 | `DB_PASSWORD` | Compose | Пароль PostgreSQL для БД и контейнера миграций. |
 | `DB_NAME` | Compose | Имя локальной базы данных. |
+| `DB_PORT` | Compose | Порт PostgreSQL, публикуемый на host для интеграционных тестов. |
 
 Репозиторий содержит безопасные локальные значения в `.env.example`. Настоящий `.env` игнорируется Git.
 
@@ -268,6 +269,16 @@ go test ./...
 go test -race ./...
 ```
 
+Запуск интеграционных тестов repository и HTTP с PostgreSQL:
+
+```bash
+docker compose up -d db migrations
+export TEST_DATABASE_URL='postgres://myuser:mypassword@localhost:5433/mydb?sslmode=disable'
+go test -tags=integration -count=1 -v ./tests/integration
+```
+
+Для каждого теста integration suite создаёт отдельную временную PostgreSQL schema, применяет в неё настоящую миграцию jobs и удаляет schema после завершения. Поэтому настроенному пользователю БД требуется право на создание schemas. Переменная `DB_PORT` определяет порт PostgreSQL, который Docker Compose публикует на host.
+
 Запуск end-to-end теста поверх Docker Compose окружения:
 
 ```bash
@@ -297,6 +308,7 @@ Black-box end-to-end тест ожидает готовности API, созд�
 │   ├── transport/http/         # HTTP DTO и handlers
 │   └── worker/                 # Polling loop и жизненный цикл worker
 ├── migrations/                 # Up/down миграции PostgreSQL
+├── tests/integration/          # Интеграционные тесты PostgreSQL repository и HTTP
 ├── tests/e2e/                  # Black-box end-to-end тест
 ├── Dockerfile
 └── docker-compose.yaml
@@ -315,8 +327,10 @@ Black-box end-to-end тест ожидает готовности API, созд�
 - [x] Graceful shutdown worker-а.
 - [x] End-to-end интеграционный тест.
 - [x] Исходящий webhook executor с ограничением ответа и unit-тестами.
+- [ ] Доменная модель и API для Workflow, Execution и Step.
+- [ ] Web-интерфейс для создания workflow и просмотра их запусков.
 
-Следующие этапы посвящены SSRF-защите webhook, автоматическим проверкам CI, проверке владельца lease и fencing, heartbeat, crash recovery, retries с backoff и jitter, cancellation, idempotency и observability.
+Следующие этапы посвящены SSRF-защите webhook, автоматическим проверкам CI, проверке владельца lease и fencing, heartbeat, crash recovery, retries с backoff и jitter, cancellation, idempotency и observability. После определения workflow-контрактов у GoreFlow также появится web-интерфейс для создания workflow и наблюдения за их выполнением.
 
 ## Принципы проектирования
 
