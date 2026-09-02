@@ -129,9 +129,11 @@ The current Compose setup does not attach a persistent PostgreSQL volume. The mi
 | Variable | Used by | Description |
 |---|---|---|
 | `DATABASE_URL` | API and worker | PostgreSQL connection string used by both Go processes. |
+| `TEST_DATABASE_URL` | Integration tests | Host-accessible PostgreSQL connection string used to create isolated test schemas. |
 | `DB_USER` | Compose | PostgreSQL user used to initialize the local database. |
 | `DB_PASSWORD` | Compose | PostgreSQL password used by PostgreSQL and the migration container. |
 | `DB_NAME` | Compose | Name of the local PostgreSQL database. |
+| `DB_PORT` | Compose | PostgreSQL port exposed on the host for integration tests. |
 
 The repository contains safe local defaults in `.env.example`. The real `.env` file is ignored by Git.
 
@@ -268,6 +270,16 @@ Run unit tests with the race detector:
 go test -race ./...
 ```
 
+Run repository and HTTP integration tests against PostgreSQL:
+
+```bash
+docker compose up -d db migrations
+export TEST_DATABASE_URL='postgres://myuser:mypassword@localhost:5433/mydb?sslmode=disable'
+go test -tags=integration -count=1 -v ./tests/integration
+```
+
+The integration suite creates a separate temporary PostgreSQL schema for every test, applies the real jobs migration, and removes the schema afterward. The configured database user therefore needs permission to create schemas. `DB_PORT` controls the PostgreSQL port exposed by Docker Compose.
+
 Run the end-to-end test against the Docker Compose environment:
 
 ```bash
@@ -297,6 +309,7 @@ The black-box end-to-end test waits for the API, creates an `echo` job through `
 │   ├── transport/http/         # HTTP DTOs and handlers
 │   └── worker/                 # Polling loop and worker lifecycle
 ├── migrations/                 # PostgreSQL up/down migrations
+├── tests/integration/          # PostgreSQL repository and HTTP integration tests
 ├── tests/e2e/                  # Black-box end-to-end test
 ├── Dockerfile
 └── docker-compose.yaml
@@ -315,8 +328,10 @@ The black-box end-to-end test waits for the API, creates an `echo` job through `
 - [x] Worker graceful shutdown.
 - [x] End-to-end integration test.
 - [x] Outbound webhook executor with response limits and unit coverage.
+- [ ] Workflow, execution, and step domain model and API.
+- [ ] Web frontend for creating workflows and inspecting their runs.
 
-Next stages focus on SSRF protection for webhook delivery, automated CI checks, lease ownership and fencing, heartbeat-based renewal, crash recovery, retries with backoff and jitter, cancellation, idempotency, and observability.
+Next stages focus on SSRF protection for webhook delivery, automated CI checks, lease ownership and fencing, heartbeat-based renewal, crash recovery, retries with backoff and jitter, cancellation, idempotency, and observability. After the workflow contracts are defined, GoreFlow will also gain a web frontend for creating workflows and monitoring their executions.
 
 ## Design principles
 
